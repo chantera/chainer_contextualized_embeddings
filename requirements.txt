@@ -1,0 +1,3 @@
+chainer
+h5py
+tqdm

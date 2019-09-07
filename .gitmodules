@@ -1,0 +1,3 @@
+[submodule "chainer-models"]
+	path = chainer-models
+	url = https://github.com/chainer/models
