@@ -50,11 +50,19 @@ def run(encoder, input_file, output_file, batch_size=32):
 
 
 def encode(input_file, output_file, vocab_file, model_file, config_file,
-           encoding_type, batch_size=32):
+           encoding_type, gpu=-1, batch_size=32):
     if encoding_type == 'elmo':
-        encoder = encoders.ElmoEncoder(vocab_file, config_file, model_file)
+        encoder = encoders.ElmoEncoder(
+            vocab_file, config_file, model_file, gpu)
+    elif encoding_type == 'bert_cased':
+        encoder = encoders.BertEncoder(
+            vocab_file, config_file, model_file, do_lower_case=False, gpu=gpu)
+    elif encoding_type == 'bert_uncased':
+        encoder = encoders.BertEncoder(
+            vocab_file, config_file, model_file, do_lower_case=True, gpu=gpu)
     else:
-        raise ValueError
+        raise ValueError(
+            'encoding_type `{}` is not supported'.format(encoding_type))
     run(encoder, input_file, output_file, batch_size)
 
 
@@ -65,7 +73,10 @@ if __name__ == '__main__':
     parser.add_argument('--vocab', required=True)
     parser.add_argument('--model', required=True)
     parser.add_argument('--config', required=True)
+    parser.add_argument('--encoding', '-e', required=True,
+                        choices=('elmo', 'bert_cased', 'bert_uncased'))
+    parser.add_argument('--gpu', '-g', type=int, default=-1)
     parser.add_argument('--batchsize', '-b', type=int, default=32)
     args = parser.parse_args()
     encode(args.input, args.output, args.vocab, args.model, args.config,
-           'elmo', args.batchsize)
+           args.encoding, args.gpu, args.batchsize)
