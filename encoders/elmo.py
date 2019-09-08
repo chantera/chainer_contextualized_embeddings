@@ -1,5 +1,5 @@
-import json
 import importlib
+import json
 
 from chainer import cuda
 
