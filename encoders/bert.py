@@ -14,7 +14,8 @@ class BertEncoder(Encoder):
     # See: chainer-models/bert/extract_features.py
 
     def __init__(self, vocab_file, config_file, checkpoint_file,
-                 do_lower_case=True, merge=False, gpu=-1):
+                 do_lower_case=True, layers=(-1, -2, -3, -4), merge=False,
+                 gpu=-1):
         config = modeling.BertConfig.from_json_file(config_file)
         self._tokenizer = tokenization.FullTokenizer(
             vocab_file=vocab_file, do_lower_case=do_lower_case)
@@ -27,6 +28,7 @@ class BertEncoder(Encoder):
             chainer.cuda.get_device_from_id(gpu).use()
             self._model.to_gpu()
         self._do_lower_case = do_lower_case
+        self._layers = layers
         self._merge = merge
         self._gpu = gpu
         self.context = None
@@ -39,6 +41,7 @@ class BertEncoder(Encoder):
             'sentences': sentences,
             'features': features,
             'tokens': None,
+            'layers': self._layers,
         }
         return batch
 
@@ -52,8 +55,7 @@ class BertEncoder(Encoder):
         return outputs
 
     def _postprosess(self, model_outputs):
-        embeddings = chainer.cuda.to_cpu(
-            self._extract_embeddings(model_outputs))
+        embeddings = self._extract_embeddings(model_outputs)
         if self._merge == 'wordpieces':
             outputs, tokens = self._merge_wordpieces(embeddings)
         elif self._merge == 'as_inputs':
@@ -68,8 +70,9 @@ class BertEncoder(Encoder):
         return outputs
 
     def _extract_embeddings(self, layer_outputs):
-        # See: http://jalammar.github.io/illustrated-bert/
-        return layer_outputs[-2].array
+        embeddings = [layer_outputs[index].array for index in self._layers]
+        embeddings = self._model.xp.stack(embeddings, axis=1)
+        return chainer.cuda.to_cpu(embeddings)
 
     def _merge_wordpieces(self, embeddings):
         outputs = []
@@ -84,18 +87,18 @@ class BertEncoder(Encoder):
                     token = token[2:]
                 elif j > 0:
                     if j - offset > 1:
-                        v = self._pool_wordpieces(embeddings[i, offset:j])
+                        v = self._pool_wordpieces(embeddings[i, :, offset:j])
                     else:
-                        v = embeddings[i, offset]
+                        v = embeddings[i, :, offset]
                     vectors.append(v)
                     seq.append(buffer)
                     buffer = ''
                     offset = j
                 buffer += token
             assert offset == j
-            vectors.append(embeddings[i, offset])
+            vectors.append(embeddings[i, :, offset])
             seq.append(buffer)
-            output = np.vstack(vectors)
+            output = np.stack(vectors, axis=1)
             outputs.append(output)
             tokens.append(seq)
         return outputs, tokens
@@ -118,9 +121,9 @@ class BertEncoder(Encoder):
             for j, token in iterator:
                 if buffer == sentence[tid]:
                     if j - offset > 1:
-                        v = self._pool_wordpieces(embeddings[i, offset:j])
+                        v = self._pool_wordpieces(embeddings[i, :, offset:j])
                     else:
-                        v = embeddings[i, offset]
+                        v = embeddings[i, :, offset]
                     vectors.append(v)
                     seq.append(buffer)
                     buffer = ''
@@ -135,13 +138,13 @@ class BertEncoder(Encoder):
                 buffer += token
             assert offset == j and token == "|||"
             assert len(seq) == len(sentence)
-            output = np.vstack(vectors)
+            output = np.stack(vectors, axis=1)
             outputs.append(output)
             tokens.append(seq)
         return outputs, tokens
 
     def _pool_wordpieces(self, values):
-        return values.mean(axis=0)
+        return values.mean(axis=1)
 
 
 def read_examples(iterable):
