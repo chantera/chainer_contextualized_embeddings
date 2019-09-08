@@ -14,7 +14,7 @@ class BertEncoder(Encoder):
     # See: chainer-models/bert/extract_features.py
 
     def __init__(self, vocab_file, config_file, checkpoint_file,
-                 do_lower_case=True, gpu=-1):
+                 do_lower_case=True, merge=False, gpu=-1):
         config = modeling.BertConfig.from_json_file(config_file)
         self._tokenizer = tokenization.FullTokenizer(
             vocab_file=vocab_file, do_lower_case=do_lower_case)
@@ -26,13 +26,20 @@ class BertEncoder(Encoder):
         if gpu >= 0:
             chainer.cuda.get_device_from_id(gpu).use()
             self._model.to_gpu()
+        self._do_lower_case = do_lower_case
+        self._merge = merge
         self._gpu = gpu
+        self.context = None
 
     def _preprocess(self, sentences):
         examples = read_examples(sentences)
         features = convert_examples_to_features(examples, self._tokenizer)
-        self._features = features
         batch = make_batch(features, self._gpu)
+        self.context = {
+            'sentences': sentences,
+            'features': features,
+            'tokens': None,
+        }
         return batch
 
     def encode(self, sentences):
@@ -46,27 +53,89 @@ class BertEncoder(Encoder):
 
     def _postprosess(self, model_outputs):
         embeddings = self._extract_embeddings(model_outputs)
-        outputs = []
-        for i, feature in enumerate(self._features):
-            vectors = []
-            offset = 0
-            for j, token in enumerate(feature['tokens']):
-                if j > 0 and not token.startswith('##'):
-                    if j - offset > 1:
-                        v = self._pool_wordpieces(embeddings[i, offset:j])
-                    else:
-                        v = embeddings[i, offset]
-                    vectors.append(v)
-                    offset = j
-            assert offset == j
-            vectors.append(embeddings[i, offset])
-            output = np.vstack(vectors)
-            outputs.append(output)
+        if self._merge == 'wordpieces':
+            outputs, tokens = self._merge_wordpieces(embeddings)
+        elif self._merge == 'as_inputs':
+            outputs, tokens = self._merge_as_input_tokens(embeddings)
+        elif self._merge == 'raw' or self._merge is False:
+            tokens = [f['tokens'] for f in self.context['features']]
+            outputs = [embeddings[i, :len(s)] for i, s in enumerate(tokens)]
+        else:
+            raise ValueError(
+                'merging `{}` is not supported'.format(self._merge))
+        self.context['tokens'] = tokens
         return outputs
 
     def _extract_embeddings(self, layer_outputs):
         # See: http://jalammar.github.io/illustrated-bert/
         return layer_outputs[-2].array
+
+    def _merge_wordpieces(self, embeddings):
+        outputs = []
+        tokens = []
+        for i, feature in enumerate(self.context['features']):
+            vectors = []
+            seq = []
+            offset = 0
+            buffer = ''
+            for j, token in enumerate(feature['tokens']):
+                if token.startswith('##'):
+                    token = token[2:]
+                elif j > 0:
+                    if j - offset > 1:
+                        v = self._pool_wordpieces(embeddings[i, offset:j])
+                    else:
+                        v = embeddings[i, offset]
+                    vectors.append(v)
+                    seq.append(buffer)
+                    buffer = ''
+                    offset = j
+                buffer += token
+            assert offset == j
+            vectors.append(embeddings[i, offset])
+            seq.append(buffer)
+            output = np.vstack(vectors)
+            outputs.append(output)
+            tokens.append(seq)
+        return outputs, tokens
+
+    def _merge_as_input_tokens(self, embeddings):
+        outputs = []
+        tokens = []
+        for i, (feature, sentence) in enumerate(
+                zip(self.context['features'], self.context['sentences'])):
+            if self._do_lower_case:
+                sentence = sentence.lower()
+            sentence = sentence.split()
+            tid = 0
+            vectors = []
+            seq = []
+            offset = 1
+            buffer = ''
+            iterator = enumerate(feature['tokens'])
+            next(iterator)  # skip [CLS]
+            for j, token in iterator:
+                if buffer == sentence[tid]:
+                    if j - offset > 1:
+                        v = self._pool_wordpieces(embeddings[i, offset:j])
+                    else:
+                        v = embeddings[i, offset]
+                    vectors.append(v)
+                    seq.append(buffer)
+                    buffer = ''
+                    offset = j
+                    tid += 1
+                if token == "[SEP]":
+                    token = "|||"
+                elif token.startswith('##'):
+                    token = token[2:]
+                buffer += token
+            assert offset == j and token == "|||"
+            assert len(seq) == len(sentence)
+            output = np.vstack(vectors)
+            outputs.append(output)
+            tokens.append(seq)
+        return outputs, tokens
 
     def _pool_wordpieces(self, values):
         return values.mean(axis=0)

@@ -56,10 +56,12 @@ def encode(input_file, output_file, vocab_file, model_file, config_file,
             vocab_file, config_file, model_file, gpu)
     elif encoding_type == 'bert_cased':
         encoder = encoders.BertEncoder(
-            vocab_file, config_file, model_file, do_lower_case=False, gpu=gpu)
+            vocab_file, config_file, model_file, gpu=gpu,
+            do_lower_case=False, merge='as_inputs')
     elif encoding_type == 'bert_uncased':
         encoder = encoders.BertEncoder(
-            vocab_file, config_file, model_file, do_lower_case=True, gpu=gpu)
+            vocab_file, config_file, model_file, gpu=gpu,
+            do_lower_case=True, merge='as_inputs')
     else:
         raise ValueError(
             'encoding_type `{}` is not supported'.format(encoding_type))
