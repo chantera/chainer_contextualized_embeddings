@@ -128,6 +128,8 @@ class BertEncoder(Encoder):
                     tid += 1
                 if token == "[SEP]":
                     token = "|||"
+                elif token == "[UNK]":
+                    token = sentence[tid]
                 elif token.startswith('##'):
                     token = token[2:]
                 buffer += token
