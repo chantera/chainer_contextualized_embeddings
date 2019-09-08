@@ -52,7 +52,8 @@ class BertEncoder(Encoder):
         return outputs
 
     def _postprosess(self, model_outputs):
-        embeddings = self._extract_embeddings(model_outputs)
+        embeddings = chainer.cuda.to_cpu(
+            self._extract_embeddings(model_outputs))
         if self._merge == 'wordpieces':
             outputs, tokens = self._merge_wordpieces(embeddings)
         elif self._merge == 'as_inputs':
