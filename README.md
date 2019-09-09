@@ -11,7 +11,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Obtain ELMo Embeddings
+### Obtain ELMo embeddings
 
 ```
 ./scripts/download_elmo_en.sh
@@ -31,7 +31,7 @@ python encode.py \
   --gpu [GPU]
 ```
 
-### Obtain BERT Embeddings
+### Obtain BERT embeddings
 
 ```
 ./scripts/download_bert_base_en_uncased.sh
@@ -49,4 +49,15 @@ python encode.py \
   --config data/uncased_L-12_H-768_A-12/bert_config.json \
   --encoding bert_uncased \
   --gpu [GPU]
+```
+
+### Load embeddings
+
+```py
+embedding_file = 'output.hdf5'
+with h5py.File(embedding_file, 'r') as f:
+    sent_idx = '0'
+    sentence_embeddings = f[sent_idx][...]
+    print(sentence_embeddings.shape)
+    # shape = (n_layers, sequence_length, embedding_dim)
 ```
