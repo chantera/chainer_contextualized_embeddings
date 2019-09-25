@@ -1,4 +1,5 @@
 chainer
 h5py
+requests
 tqdm
 tensorflow~=1.11
