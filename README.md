@@ -6,6 +6,7 @@ This is a wrapper of [chainer/models](https://github.com/chainer/models) to get 
 
 ```
 git clone --recursive https://github.com/chantera/chainer_contextualized_embeddings
+cd chainer_contextualized_embeddings
 pip install -r requirements.txt
 ```
 
