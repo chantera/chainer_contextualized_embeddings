@@ -62,12 +62,12 @@ class BertEncoder(Encoder):
             outputs, tokens = self._merge_as_input_tokens(embeddings)
         elif self._merge == 'raw' or self._merge is False:
             tokens = [f['tokens'] for f in self.context['features']]
-            outputs = [embeddings[i, :len(s)] for i, s in enumerate(tokens)]
+            outputs = [embeddings[i, :, :len(s)] for i, s in enumerate(tokens)]
         else:
             raise ValueError(
                 'merging `{}` is not supported'.format(self._merge))
         self.context['tokens'] = tokens
-        return outputs
+        return outputs  # [(n_layers, n_tokens, dim)]
 
     def _extract_embeddings(self, layer_outputs):
         embeddings = [layer_outputs[index].array for index in self._layers]
